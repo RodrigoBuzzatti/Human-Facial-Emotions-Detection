@@ -4,6 +4,39 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import pandas as pd
+from sklearn.model_selection import train_test_split
+
+"""
+https://scikit-learn.org/0.19/modules/generated/sklearn.model_selection.train_test_split.html
+X, y = np.arange(10).reshape((5, 2)), range(5)
+X
+array([[0, 1],
+       [2, 3],
+       [4, 5],
+       [6, 7],
+       [8, 9]])
+list(y)
+[0, 1, 2, 3, 4]
+
+X_train, X_test, y_train, y_test = train_test_split(
+     X, y, test_size=0.33, random_state=42)
+
+X_train
+array([[4, 5],
+       [0, 1],
+       [6, 7]])
+y_train
+[2, 0, 3]
+
+X_test
+array([[2, 3],
+       [8, 9]])
+y_test
+[1, 4]
+
+train_test_split(y, shuffle=False)
+[[0, 1, 2], [3, 4]]
+"""
 
 # Função para carregar imagens de um diretório e redimensionar
 def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_images=None, sort=False):
@@ -35,7 +68,11 @@ img_size_hight = 464
 dataset_folder = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer Master/Trabalho Metodos Tradicionais/DataSet_HandImages'
 
 # Carregar imagens
-X_train, y_train = load_folder(dataset_folder, img_size_width,img_size_hight)
+#X_train, y_train = load_folder(dataset_folder, img_size_width,img_size_hight)
+X, y = load_folder(dataset_folder, img_size_width,img_size_hight)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+
 print('Shape do Treino: ',X_train.shape)
 
 import random
@@ -131,4 +168,80 @@ def train(X_train, y_train):
 
 model = train(X_train_pca, y_train)
 print(X_train_pca.shape)
+
+
+from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
+import seaborn as sns
+
+# Inferência e avaliação
+def predict_and_evaluate(model, X_test, y_test):
+
+    # Inferência
+    y_pred = model.predict(X_test)
+    probabilities = model.predict_proba(X_test)
+
+    # Métricas
+    print('Acurácia:', accuracy_score(y_test, y_pred))
+    print('F1 score:', f1_score(y_test, y_pred, average='weighted'))
+
+    # Matriz de confusão
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap="Blues", xticklabels=np.unique(y_test), yticklabels=np.unique(y_test))
+    plt.title('Matriz de Confusão')
+    plt.xlabel('Predito')
+    plt.ylabel('Verdadeiro')
+    plt.show()
+    return y_pred,probabilities
+
+print('Resultados de Treino')
+y_pred_treino,probabilities_treino = predict_and_evaluate(model, X_train_pca, y_train)
+
+print('Resultados de Teste')
+y_pred_teste,probabilities_teste = predict_and_evaluate(model, X_test_pca, y_test)
+
+# Analise dos Erros
+# Filtrar previsões incorretas
+incorrect_indices = np.where(y_pred_teste != y_test)[0]
+
+# Se houver previsões incorretas, selecione até 10 para exibir
+num_images_to_show = min(10, len(incorrect_indices))
+if num_images_to_show > 0:
+    plt.figure(figsize=(10, 4))
+    for i in range(num_images_to_show):
+        incorrect_index = incorrect_indices[i]
+        incorrect_image = X_test[incorrect_index]
+        true_label = y_test[incorrect_index]
+        predicted_label = y_pred_teste[incorrect_index]
+
+        plt.subplot(2, 5, i + 1)
+        plt.imshow(incorrect_image, cmap='gray')
+        plt.title(f'P:={predicted_label}, V:={true_label}', fontsize=10)
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+else:
+    print("Nenhuma previsão incorreta encontrada.")
+
+# Criar DataFrame com informações das previsões incorretas
+incorrect_predictions = []
+
+for i in incorrect_indices:
+    true_label = y_test[i]
+    predicted_label = y_pred_teste[i]
+    row = {
+        'indice': i,
+        'true': true_label,
+        'pred': predicted_label
+    }
+    # Adicionar as probabilidades para cada classe
+    for class_index in range(7):
+        row[f'proba_{class_index}'] = probabilities_teste[i, class_index]
+    incorrect_predictions.append(row)
+
+df_incorrect_predictions = pd.DataFrame(incorrect_predictions)
+
+# Exibir o DataFrame
+print(df_incorrect_predictions.head(10))
+
 
