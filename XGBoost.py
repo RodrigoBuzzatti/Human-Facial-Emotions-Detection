@@ -1,11 +1,10 @@
 import os
 import numpy as np
 from PIL import Image
-from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
+from sklearn.ensemble import GradientBoostingClassifier
 
 # Função para carregar imagens de um diretório e redimensionar
 def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_images=None, sort=False):
@@ -108,38 +107,23 @@ X_test_flat = X_test.reshape((X_test.shape[0], -1))
 print('Apos o Flatten, shape do X_train: ',X_train_flat.shape)
 print('Apos o Flatten, shape do X_test: ',X_test_flat.shape)
 
-from sklearn.decomposition import PCA
+"""
+clf = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0,
+    max_depth=1, random_state=0).fit(X_train, y_train)
+clf.score(X_test, y_test)
+"""
 
-#n_components = 5000
-#pca = PCA(n_components=n_components)
-#X_train_pca = pca.fit_transform(X_train_flat)
-#X_test_pca = pca.transform(X_test_flat)
-X_train_pca = X_train_flat
-X_test_pca =  X_test_flat
-
-# Plotar variância acumulada
-#print('Resultado da Variancia acumulada do PCA')
-#explained_variance_ratio = pca.explained_variance_ratio_
-#cumulative_variance = np.cumsum(explained_variance_ratio)
-
-#plt.figure(figsize=(10, 6))
-#plt.plot(range(1, n_components + 1), cumulative_variance, marker='o', linestyle='--')
-#plt.xlabel('Número de Componentes')
-#plt.ylabel('Variância Acumulada')
-#plt.title('Variância Acumulada Explicada pelos Componentes Principais')
-#plt.annotate("{:.2f}".format(cumulative_variance[-1]), xy=(n_components+1, cumulative_variance[-1]), color='red')
-#plt.grid(True)
-#plt.show()
-
-from sklearn.linear_model import LogisticRegression
-# Treinamento de um modelo Regressão Logistica
+# Treinamento de um modelo XGBoost de Regressao Logistica
+#https://scikit-learn.org/stable/modules/ensemble.html#ensemble
+#GradientBoostingClassifier and GradientBoostingRegressor, might be preferred for small sample sizes since binning may lead to split points that are too approximate in this setting.
 def train(X_train, y_train):
-  model = LogisticRegression(max_iter=10000)
-  model.fit(X_train, y_train)
+  model = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0,
+    max_depth=1, random_state=0).fit(X_train, y_train)
+  model.score(X_train, y_train)
   return model
 
-model = train(X_train_pca, y_train)
-print(X_train_pca.shape)
+model = train(X_train_flat, y_train)
+print(X_train_flat.shape)
 
 
 from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
@@ -167,10 +151,10 @@ def predict_and_evaluate(model, X_test, y_test):
     return y_pred,probabilities
 
 print('Resultados de Treino')
-y_pred_treino,probabilities_treino = predict_and_evaluate(model, X_train_pca, y_train)
+y_pred_treino,probabilities_treino = predict_and_evaluate(model, X_train_flat, y_train)
 
 print('Resultados de Teste')
-y_pred_teste,probabilities_teste = predict_and_evaluate(model, X_test_pca, y_test)
+y_pred_teste,probabilities_teste = predict_and_evaluate(model, X_test_flat, y_test)
 
 # Analise dos Erros
 # Filtrar previsões incorretas
