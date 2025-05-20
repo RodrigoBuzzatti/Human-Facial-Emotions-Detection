@@ -131,7 +131,7 @@ print('Apos o Flatten, shape do X_test: ',X_test_flat.shape)
 
 from sklearn.decomposition import PCA
 
-n_components = 500
+n_components = 400
 pca = PCA(n_components=n_components)
 X_train_pca = pca.fit_transform(X_train_flat)
 X_test_pca = pca.transform(X_test_flat)

@@ -117,11 +117,12 @@ clf.score(X_test, y_test)
 #https://scikit-learn.org/stable/modules/ensemble.html#ensemble
 #GradientBoostingClassifier and GradientBoostingRegressor, might be preferred for small sample sizes since binning may lead to split points that are too approximate in this setting.
 def train(X_train, y_train):
-  model = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0,
-    max_depth=1, random_state=0).fit(X_train, y_train)
-  model.score(X_train, y_train)
+  model = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0)
+  model.fit(X_train, y_train)
+  #model.score(X_train, y_train)
   return model
 
+print("Iniciando o modelo XGBoost")
 model = train(X_train_flat, y_train)
 print(X_train_flat.shape)
 
