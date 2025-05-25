@@ -1,13 +1,21 @@
+# Execucção do Modelo Random Forest
+
 import os
 import numpy as np
 from PIL import Image, ImageOps
-from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, ConfusionMatrixDisplay
 import time as time
 
+def format_time(seconds):
+    minutes = seconds // 60
+    remaining_seconds = seconds % 60
+    return f"{minutes}:{remaining_seconds:02}"
+
 # Função para carregar imagens de um diretório e redimensionar
-def load_folder(folder, img_size, labels_dict=None, max_images=None, sort=False):
+def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_images=None, sort=False):
     print("Lendo arquivos na pasta: ",folder)
     images = []
     labels = []
@@ -19,8 +27,8 @@ def load_folder(folder, img_size, labels_dict=None, max_images=None, sort=False)
         file_list_inside_folder = os.listdir(well_formed_directory)
         for file_name in file_list_inside_folder:
             img_path = os.path.join(well_formed_directory, file_name)
-            img = Image.open(img_path).resize((img_size, img_size)).convert('RGB')
-            img = ImageOps.grayscale(img)
+            img = Image.open(img_path).resize((img_size_width,img_size_hight)).convert('RGB')
+            #img = ImageOps.grayscale(img) # Usei imagens em Tons de Cinza mas a performance caiu
             img_array = np.array(img)
             images.append(img_array)
             count = count + 1
@@ -31,20 +39,26 @@ def load_folder(folder, img_size, labels_dict=None, max_images=None, sort=False)
     return np.array(images), np.array(labels)
 
 # Data set folder path: D:\rodri\Documents\OneDrive\Documentos\Cursos\Visual Computer Master\Trabalho Metodos Tradicionais\DataSet_HumanFaces
-img_size = 48  # Redimensionar imagens para 48x48 pixels
-train_folder = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer Master/Trabalho Metodos Tradicionais/DataSet_HumanFaces/train'
-test_folder  = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer Master/Trabalho Metodos Tradicionais/DataSet_HumanFaces/test'
+#                       D:\rodri\Documents\OneDrive\Documentos\Cursos\Visual Computer Master\Trabalho Metodos Tradicionais\DataSet_HandImages
+img_size_width = 348  # Redimensionar imagens para width x hight
+img_size_hight = 464
+dataset_folder = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer Master/Trabalho Metodos Tradicionais/DataSet_HandImages'
 
-# Carregar imagens de treino
-X_train, y_train = load_folder(train_folder, img_size)
+# Carregar imagens
+#X_train, y_train = load_folder(dataset_folder, img_size_width,img_size_hight)
+start = time.time()
+print("Iniciando a carga das Imagens")
+X, y = load_folder(dataset_folder, img_size_width,img_size_hight)
+t = time.time() - start
+print("Tempo total para carregar as Imagens do Dataset: ",format_time(t))
+
+#Separando o dataset entre treino e teste
+#https://scikit-learn.org/0.19/modules/generated/sklearn.model_selection.train_test_split.html
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+
 print('Shape do Treino: ',X_train.shape)
 
-# Carregar imagens de teste
-X_test, y_test = load_folder(test_folder, img_size)
-print('Shape do Teste: ',X_test.shape)
-
 import random
-
 plt.figure(figsize=(10, 3))
 for i in range(10):
   rnd = random.randint(0, len(X_train))
@@ -56,7 +70,7 @@ for i in range(10):
   plt.title(f'{true_label}', fontsize=10)
   plt.axis('off')
 plt.tight_layout()
-plt.show()
+#plt.show()
 
 # Obter valores mínimos e máximos dos pixels
 pixel_min = np.min(X_train)
@@ -84,7 +98,7 @@ plt.ylabel('Altura (pixels)')
 plt.grid(True)
 
 plt.tight_layout()
-plt.show()
+#plt.show()
 
 # Normalizar os dados
 X_train = X_train.astype('float32') / 255.0
@@ -103,16 +117,19 @@ print("Contagens:", train_counts)
 X_train_flat = X_train.reshape((X_train.shape[0], -1))
 X_test_flat = X_test.reshape((X_test.shape[0], -1))
 
-print('Apos o Flatten, shape do X_trian: ',X_train_flat.shape)
+print('Apos o Flatten, shape do X_train: ',X_train_flat.shape)
 print('Apos o Flatten, shape do X_test: ',X_test_flat.shape)
 
 from sklearn.decomposition import PCA
-#Aplicando PCA para reduzir o numero de componentes
-n_components = 400
+
+n_components = 1000
 pca = PCA(n_components=n_components)
+start = time.time()
+print("Iniciando o PCA")
 X_train_pca = pca.fit_transform(X_train_flat)
 X_test_pca = pca.transform(X_test_flat)
-
+t = time.time() - start
+print("Tempo total para executar o PCA: ",format_time(t))
 
 # Plotar variância acumulada
 print('Resultado da Variancia acumulada do PCA')
@@ -126,35 +143,45 @@ plt.ylabel('Variância Acumulada')
 plt.title('Variância Acumulada Explicada pelos Componentes Principais')
 plt.annotate("{:.2f}".format(cumulative_variance[-1]), xy=(n_components+1, cumulative_variance[-1]), color='red')
 plt.grid(True)
-plt.show()
+#plt.show()
 
-"""
-from sklearn.linear_model import LogisticRegression
-# Treinamento de um modelo Regressão Logistica
-def train(X_train, y_train):
-  model = LogisticRegression(max_iter=10000)
-  model.fit(X_train, y_train)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import randint
+
+# Treinamento de um modelo Random Forest
+def train(X_train, y_train, n_estimators=100):
+  model = RandomForestClassifier(n_estimators=n_estimators, min_samples_split= 3, verbose = 2, random_state = True)
+  model.fit(X_train, y_train.flatten())
   return model
 
-model = train(X_train_pca, y_train)
-print(X_train_pca.shape)
-"""
-from sklearn.ensemble import GradientBoostingClassifier
-# Treinamento de um modelo XGBoost de Regressao Logistica
-#https://scikit-learn.org/stable/modules/ensemble.html#ensemble
-#GradientBoostingClassifier and GradientBoostingRegressor, might be preferred for small sample sizes since binning may lead to split points that are too approximate in this setting.
-# Tunning GradienteBoostingClassifier https://www.geeksforgeeks.org/how-to-tune-hyperparameters-in-gradient-boosting-algorithm/
-def train(X_train, y_train):
-  model = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=None, random_state=0,subsample=0.8,min_samples_leaf=3)
-  model.fit(X_train, y_train)
-  #model.score(X_train, y_train)
-  return model
+param_dist = {'n_estimators': randint(50,500),
+              'max_depth': randint(1,20)}
+rf = RandomForestClassifier()
+rand_search = RandomizedSearchCV(rf,
+                                 param_distributions = param_dist,
+                                 n_iter=5,
+                                 cv=5)
+# Fit the random search object to the data
+rand_search.fit(X_train_pca, y_train)
+# Create a variable for the best model
+best_rf = rand_search.best_estimator_
 
+# Print the best hyperparameters
+print('Best hyperparameters:',  rand_search.best_params_)
+# Generate predictions with the best model
+y_pred = best_rf.predict(X_test_pca)
+
+# Create the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+ConfusionMatrixDisplay(confusion_matrix=cm).plot();
+"""
 start = time.time()
-print("Iniciando o modelo XGBoost")
+print("Iniciando o modelo RandomForest")
 model = train(X_train_pca, y_train)
 t = time.time() - start
-print(t)
+print("Tempo total para executar o treino: ",format_time(t))
 print(X_train_flat.shape)
 
 from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
@@ -230,6 +257,5 @@ df_incorrect_predictions = pd.DataFrame(incorrect_predictions)
 
 # Exibir o DataFrame
 print(df_incorrect_predictions.head(10))
-
-
+"""
 

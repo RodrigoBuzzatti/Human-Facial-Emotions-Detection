@@ -1,11 +1,18 @@
+# Execucção do Modelo LogisticRegression
+
 import os
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import time as time
 
+def format_time(seconds):
+    minutes = seconds // 60
+    remaining_seconds = seconds % 60
+    return f"{minutes}:{remaining_seconds:02}"
 
 # Função para carregar imagens de um diretório e redimensionar
 def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_images=None, sort=False):
@@ -21,6 +28,7 @@ def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_ima
         for file_name in file_list_inside_folder:
             img_path = os.path.join(well_formed_directory, file_name)
             img = Image.open(img_path).resize((img_size_width,img_size_hight)).convert('RGB')
+            #img = ImageOps.grayscale(img) # Usei imagens em Tons de Cinza mas a performance caiu
             img_array = np.array(img)
             images.append(img_array)
             count = count + 1
@@ -32,7 +40,9 @@ def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_ima
 
 # Data set folder path: D:\rodri\Documents\OneDrive\Documentos\Cursos\Visual Computer Master\Trabalho Metodos Tradicionais\DataSet_HumanFaces
 #                       D:\rodri\Documents\OneDrive\Documentos\Cursos\Visual Computer Master\Trabalho Metodos Tradicionais\DataSet_HandImages
-img_size_width = 348  # Redimensionar imagens para width x hight
+
+# Redimensionar imagens para width x hight uma vez que a imagem original é muito grande e causa estouro de memoria durante a carga
+img_size_width = 348
 img_size_hight = 464
 dataset_folder = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer Master/Trabalho Metodos Tradicionais/DataSet_HandImages'
 
@@ -110,37 +120,56 @@ print('Apos o Flatten, shape do X_test: ',X_test_flat.shape)
 
 from sklearn.decomposition import PCA
 
-#n_components = 5000
-#pca = PCA(n_components=n_components)
-#X_train_pca = pca.fit_transform(X_train_flat)
-#X_test_pca = pca.transform(X_test_flat)
-X_train_pca = X_train_flat
-X_test_pca =  X_test_flat
+n_components = 1000
+pca = PCA(n_components=n_components)
+start = time.time()
+print("Iniciando o PCA")
+X_train_pca = pca.fit_transform(X_train_flat)
+X_test_pca = pca.transform(X_test_flat)
+t = time.time() - start
+print("Tempo total para executar o PCA: ",format_time(t))
 
 # Plotar variância acumulada
-#print('Resultado da Variancia acumulada do PCA')
-#explained_variance_ratio = pca.explained_variance_ratio_
-#cumulative_variance = np.cumsum(explained_variance_ratio)
+print('Resultado da Variancia acumulada do PCA')
+explained_variance_ratio = pca.explained_variance_ratio_
+cumulative_variance = np.cumsum(explained_variance_ratio)
 
-#plt.figure(figsize=(10, 6))
-#plt.plot(range(1, n_components + 1), cumulative_variance, marker='o', linestyle='--')
-#plt.xlabel('Número de Componentes')
-#plt.ylabel('Variância Acumulada')
-#plt.title('Variância Acumulada Explicada pelos Componentes Principais')
-#plt.annotate("{:.2f}".format(cumulative_variance[-1]), xy=(n_components+1, cumulative_variance[-1]), color='red')
-#plt.grid(True)
-#plt.show()
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, n_components + 1), cumulative_variance, marker='o', linestyle='--')
+plt.xlabel('Número de Componentes')
+plt.ylabel('Variância Acumulada')
+plt.title('Variância Acumulada Explicada pelos Componentes Principais')
+plt.annotate("{:.2f}".format(cumulative_variance[-1]), xy=(n_components+1, cumulative_variance[-1]), color='red')
+plt.grid(True)
+plt.show()
 
 from sklearn.linear_model import LogisticRegression
 # Treinamento de um modelo Regressão Logistica
 def train(X_train, y_train):
-  model = LogisticRegression(max_iter=10000)
-  model.fit(X_train, y_train)
+  model = LogisticRegression(penalty = 'l2',
+                             dual = False,
+                             tol = 0.0001,
+                             C = 1.0,
+                             fit_intercept = True,
+                             intercept_scaling = 1,
+                             class_weight = None,
+                             random_state = None,
+                             solver = 'newton-cg', # For small datasets, ‘liblinear’ is a good choice
+                             max_iter = 100, # Maximum number of iterations taken for the solvers to converge
+                             multi_class = 'deprecated',
+                             verbose = 0,
+                             warm_start = False,
+                             n_jobs = -1,
+                             l1_ratio = None)
+  model.fit(X_train, y_train.flatten())
   return model
 
+start = time.time()
+print("Iniciando o modelo LogisticRegression")
 model = train(X_train_pca, y_train)
-print(X_train_pca.shape)
-
+t = time.time() - start
+print("Tempo total para executar o treino: ",format_time(t))
+print(X_train_flat.shape)
 
 from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
 import seaborn as sns
