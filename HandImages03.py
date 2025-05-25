@@ -1,12 +1,14 @@
+# Execucção do Modelo Random Forest
+
 import os
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, ConfusionMatrixDisplay
+from skimage.feature import hog
 import time as time
-from sklearn.decomposition import PCA
 
 def format_time(seconds):
     minutes = seconds // 60
@@ -27,6 +29,7 @@ def load_folder(folder, img_size_width,img_size_hight, labels_dict=None, max_ima
         for file_name in file_list_inside_folder:
             img_path = os.path.join(well_formed_directory, file_name)
             img = Image.open(img_path).resize((img_size_width,img_size_hight)).convert('RGB')
+            #img = ImageOps.grayscale(img) # Usei imagens em Tons de Cinza mas a performance caiu
             img_array = np.array(img)
             images.append(img_array)
             count = count + 1
@@ -44,7 +47,11 @@ dataset_folder = 'D:/rodri/Documents/OneDrive/Documentos/Cursos/Visual Computer 
 
 # Carregar imagens
 #X_train, y_train = load_folder(dataset_folder, img_size_width,img_size_hight)
+start = time.time()
+print("Iniciando a carga das Imagens")
 X, y = load_folder(dataset_folder, img_size_width,img_size_hight)
+t = time.time() - start
+print("Tempo total para carregar as Imagens do Dataset: ",format_time(t))
 
 #Separando o dataset entre treino e teste
 #https://scikit-learn.org/0.19/modules/generated/sklearn.model_selection.train_test_split.html
@@ -64,7 +71,7 @@ for i in range(10):
   plt.title(f'{true_label}', fontsize=10)
   plt.axis('off')
 plt.tight_layout()
-plt.show()
+#plt.show()
 
 # Obter valores mínimos e máximos dos pixels
 pixel_min = np.min(X_train)
@@ -114,35 +121,19 @@ X_test_flat = X_test.reshape((X_test.shape[0], -1))
 print('Apos o Flatten, shape do X_train: ',X_train_flat.shape)
 print('Apos o Flatten, shape do X_test: ',X_test_flat.shape)
 
-n_components = 1000
-pca = PCA(n_components=n_components)
-start = time.time()
-print("Iniciando o PCA")
-X_train_pca = pca.fit_transform(X_train_flat)
-X_test_pca = pca.transform(X_test_flat)
-t = time.time() - start
-print("Tempo total para executar o PCA: ",format_time(t))
+from sklearn.ensemble import RandomForestClassifier
 
-# Treinamento de um modelo XGBoost de Regressao Logistica
-#https://scikit-learn.org/stable/modules/ensemble.html#ensemble
-#GradientBoostingClassifier and GradientBoostingRegressor, might be preferred for small sample sizes since binning may lead to split points that are too approximate in this setting.
-def train(X_train, y_train):
-  model = GradientBoostingClassifier(n_estimators=200, learning_rate=0.1, max_depth=1, random_state=0)
-  model.fit(X_train, y_train)
-  #model.score(X_train, y_train)
+# Treinamento de um modelo Random Forest
+def train(X_train, y_train, n_estimators=100):
+  model = RandomForestClassifier(n_estimators=n_estimators, min_samples_split= 3, verbose = 1, random_state = True)
+  model.fit(X_train, y_train.flatten())
   return model
 
-print("Iniciando o modelo XGBoost")
-model = train(X_train_pca, y_train)
-print(X_train_pca.shape)
-
-
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
 import seaborn as sns
 
 # Inferência e avaliação
 def predict_and_evaluate(model, X_test, y_test):
-
     # Inferência
     y_pred = model.predict(X_test)
     probabilities = model.predict_proba(X_test)
@@ -161,54 +152,70 @@ def predict_and_evaluate(model, X_test, y_test):
     plt.show()
     return y_pred,probabilities
 
-print('Resultados de Treino')
-y_pred_treino,probabilities_treino = predict_and_evaluate(model, X_train_pca, y_train)
+# Extração de características utilizando HOG
+def extract_hog_features(images):
+    hog_features = []
+    hog_images = []
+    for image in images:
+        features, img = hog(image, orientations=9,      # o número de direções angulares distintas para as quais os gradientes são calculados
+                              pixels_per_cell=(8, 8),   # tamanho (em pixels) de cada célula na qual a imagem é dividida para calcular o histograma de gradientes orientados
+                              cells_per_block=(2, 2),   # número de células em cada bloco. Os blocos são usados para normalizar os histogramas de gradientes dentro de células, melhorando a robustez a variações de iluminação e contraste.
+                              visualize=True,           # se a imagem HOG (uma representação visual das características HOG) deve ser retornada junto com o vetor de características.
+                              channel_axis=-1)          # índice do eixo do canal na imagem de entrada.
+        hog_features.append(features)
+        hog_images.append(img)
+    return np.array(hog_features), hog_images
 
-print('Resultados de Teste')
-y_pred_teste,probabilities_teste = predict_and_evaluate(model, X_test_pca, y_test)
+# Extraindo características HOG dos dados de treinamento e teste
+start = time.time()
+print("Iniciando HOG")
+X_train_hog, train_hog_images = extract_hog_features(X_train)
+X_test_hog, _ = extract_hog_features(X_test)
+t = time.time() - start
+print("Tempo total para extrair HOG do Dataset: ",format_time(t))
 
-# Analise dos Erros
-# Filtrar previsões incorretas
-incorrect_indices = np.where(y_pred_teste != y_test)[0]
+# Visualizar imagens HOG
+def visualize_multiple_hog(images, hog_images, images_to_show=5):
+    plt.figure(figsize=(6, images_to_show))
 
-# Se houver previsões incorretas, selecione até 10 para exibir
-num_images_to_show = min(10, len(incorrect_indices))
-if num_images_to_show > 0:
-    plt.figure(figsize=(10, 4))
-    for i in range(num_images_to_show):
-        incorrect_index = incorrect_indices[i]
-        incorrect_image = X_test[incorrect_index]
-        true_label = y_test[incorrect_index]
-        predicted_label = y_pred_teste[incorrect_index]
-
-        plt.subplot(2, 5, i + 1)
-        plt.imshow(incorrect_image, cmap='gray')
-        plt.title(f'P:={predicted_label}, V:={true_label}', fontsize=10)
+    for i in range(images_to_show):
+        # Mostrar imagem original
+        plt.subplot(images_to_show, 2, 2 * i + 1)
+        plt.imshow(images[i], cmap='gray')
+        plt.title(f'Imagem Original {i+1}', fontsize=8)
         plt.axis('off')
+
+        # Mostrar imagem HOG
+        plt.subplot(images_to_show, 2, 2 * i + 2)
+        plt.imshow(hog_images[i], cmap='gray')
+        plt.title(f'Imagem HOG {i+1}', fontsize=8)
+        plt.axis('off')
+
     plt.tight_layout()
     plt.show()
-else:
-    print("Nenhuma previsão incorreta encontrada.")
 
-# Criar DataFrame com informações das previsões incorretas
-incorrect_predictions = []
+images_to_show = 5
+visualize_multiple_hog(X_train, train_hog_images, images_to_show=images_to_show)
+print(X_train_hog.shape)
 
-for i in incorrect_indices:
-    true_label = y_test[i]
-    predicted_label = y_pred_teste[i]
-    row = {
-        'indice': i,
-        'true': true_label,
-        'pred': predicted_label
-    }
-    # Adicionar as probabilidades para cada classe
-    for class_index in range(7):
-        row[f'proba_{class_index}'] = probabilities_teste[i, class_index]
-    incorrect_predictions.append(row)
+model = train(X_train_hog, y_train)
 
-df_incorrect_predictions = pd.DataFrame(incorrect_predictions)
+print('Resultados de Teste com HOG')
+predict_and_evaluate(model, X_test_hog, y_test)
+print('Resultados de Treino com HOG')
+predict_and_evaluate(model, X_train_hog, y_train)
 
-# Exibir o DataFrame
-print(df_incorrect_predictions.head(10))
+# Parâmetros a serem testados para reduzir overfitting!
+tuned_parameters = [{'n_estimators': [50, 100, 200],
+                     'min_samples_leaf': [3, 5, 7]}]
 
+# Executar o grid search
+from sklearn.model_selection import GridSearchCV
+model = GridSearchCV(RandomForestClassifier(n_jobs=-1), tuned_parameters, scoring='f1_macro')
+model.fit(X_train_hog, y_train)
+print(model.best_params_)
 
+print('Resultados de Teste')
+predict_and_evaluate(model, X_test_hog, y_test)
+print('Resultados de Treino')
+predict_and_evaluate(model, X_train_hog, y_train)

@@ -175,7 +175,7 @@ y_pred = best_rf.predict(X_test_pca)
 # Create the confusion matrix
 cm = confusion_matrix(y_test, y_pred)
 
-ConfusionMatrixDisplay(confusion_matrix=cm).plot();
+ConfusionMatrixDisplay(confusion_matrix=cm).plot()
 """
 start = time.time()
 print("Iniciando o modelo RandomForest")
@@ -184,6 +184,7 @@ t = time.time() - start
 print("Tempo total para executar o treino: ",format_time(t))
 print(X_train_flat.shape)
 
+"""
 from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, confusion_matrix
 import seaborn as sns
 
@@ -209,10 +210,10 @@ def predict_and_evaluate(model, X_test, y_test):
     return y_pred,probabilities
 
 print('Resultados de Treino')
-y_pred_treino,probabilities_treino = predict_and_evaluate(model, X_train_pca, y_train)
+y_pred_treino,probabilities_treino = predict_and_evaluate(best_rf, X_train_pca, y_train)
 
 print('Resultados de Teste')
-y_pred_teste,probabilities_teste = predict_and_evaluate(model, X_test_pca, y_test)
+y_pred_teste,probabilities_teste = predict_and_evaluate(best_rf, X_test_pca, y_test)
 
 # Analise dos Erros
 # Filtrar previsões incorretas
@@ -257,5 +258,4 @@ df_incorrect_predictions = pd.DataFrame(incorrect_predictions)
 
 # Exibir o DataFrame
 print(df_incorrect_predictions.head(10))
-"""
 
